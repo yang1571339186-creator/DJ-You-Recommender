@@ -4,7 +4,7 @@
 
 ---
 
-## Agentic Workflow (SF8)
+## Agent Workflow (SF8)
 
 > Document your experience using an AI agent (e.g., Cursor Agent, Claude, Copilot) to make multi-step changes autonomously.
 
@@ -12,32 +12,65 @@
 
 <!-- Describe the goal you asked the agent to accomplish -->
 
-**Prompts used:**
+**What did the agent do?**
 
-<!-- Paste the key prompts you gave the agent -->
+<!-- List the steps the agent took (files edited, commands run, etc.) -->
 
-**What did the agent generate or change?**
-
-<!-- List the files edited, code generated, or commands run -->
-
-**What did you verify or fix manually?**
+**What did you have to verify or fix manually?**
 
 <!-- Describe anything the agent got wrong or that required human review -->
 
 ---
 
-## Design Pattern (SF10)
+## Test Generation (SF7)
 
-> Document how AI helped you choose or implement a design pattern.
+> Document how you used AI to help generate or improve tests.
 
-**Which design pattern did you use?**
+| Edge Case | Prompt Used | AI-Suggested Test | Did It Pass? | Your Reasoning |
+|-----------|-------------|-------------------|--------------|----------------|
+| | | | | |
+| | | | | |
+| | | | | |
 
-<!-- e.g., Strategy, Factory, Observer, etc. -->
+---
 
-**How did AI help you brainstorm or implement it?**
+## Linting & Style (SF9)
 
-<!-- Describe the conversation or suggestions that led to your decision -->
+> Document your use of AI for linting or code style improvements.
 
-**How does the pattern appear in your final code?**
+**Prompt used:**
 
-<!-- Point to the relevant class or method -->
+```
+<!-- Paste the prompt you gave the AI -->
+```
+
+**Linting output before:**
+
+```
+<!-- Paste relevant linter warnings/errors -->
+```
+
+**Changes applied:**
+
+<!-- Describe what you changed based on the AI's suggestions -->
+
+---
+
+## Model Comparison (SF11)
+
+> Compare two AI models on the same task.
+
+**Task given to both models:**
+
+<!-- Describe what you asked each model to do -->
+
+| | Model A | Model B |
+|-|---------|---------|
+| **Model name** | | |
+| **Response summary** | | |
+| **More Pythonic?** | | |
+| **Clearer explanation?** | | |
+
+**Which did you prefer and why?**
+
+<!-- Your conclusion -->
