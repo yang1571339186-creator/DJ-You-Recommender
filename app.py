@@ -1,198 +1,182 @@
-import random
+"""Streamlit UI for the MLB Player Guessing Game.
+
+Thin view layer over game_models.Game. All game logic (picking the secret
+player, generating/validating clues, scoring) lives in the model classes; this
+file only handles session state and rendering.
+"""
+
 import streamlit as st
 
-def get_range_for_difficulty(difficulty: str):
-    difficulty = difficulty.strip().lower()
-    if difficulty == "easy":
-        return 1, 20
-    if difficulty == "normal":
-        return 1, 100
-    if difficulty == "hard":
-        return 1, 50
-    return 1, 100
+from game_models import Clue, Game
 
 
-def parse_guess(raw: str):
-    if raw is None:
-        return False, None, "Enter a guess."
-
-    if raw == "":
-        return False, None, "Enter a guess."
-
-    try:
-        if "." in raw:
-            value = int(float(raw))
-        else:
-            value = int(raw)
-    except Exception:
-        return False, None, "That is not a number."
-
-    return True, value, None
+# ---------------------------------------------------------------------------
+# Session state
+# ---------------------------------------------------------------------------
 
 
-def check_guess(guess, secret):
+def new_game(team: str | None = None, awards: bool = False) -> None:
+    """Create a fresh Game and start a round. No clues are retrieved up front.
+
+    st.session_state.clues holds one slot per clue; each stays None until the
+    user reveals it, at which point the clue text is fetched and cached there.
     """
-    Compare guess to secret and return (outcome, message).
-
-    outcome examples: "Win", "Too High", "Too Low"
-    """
-    if (type(guess) != int):
-        guess = int(guess)
-    if (type(secret) != int):
-        secret = int(secret)
-    if guess == secret:
-        return "Win", "🎉 Correct!"
-
-    try:
-        if guess < secret:
-            return "Too Low", "📈 Go HIGHER!"
-        else:
-            return "Too High", "📉 Go LOWER!"
-    except TypeError:
-        g = int(guess)
-        secret = int(secret)
-        if g == secret:
-            return "Win", "🎉 Correct!"
-        if g < secret:
-            return "Too Low", "📈 Go HIGHER!"
-        return "Too High", "📉 Go LOWER!"
+    game = Game()
+    game.start_new_round(team=team, awards=awards)
+    st.session_state.game = game
+    st.session_state.clues = [None] * game.MAX_CLUES
+    st.session_state.messages = []
 
 
-def update_score(current_score: int, outcome: str, attempt_number: int):
-    if outcome == "Win":
-        points = 100 - 10 * (attempt_number + 1)
-        if points < 10:
-            points = 10
-        return current_score + points
+def reveal_clue(index: int) -> None:
+    """Fetch the clue at `index` on demand and cache it in session state."""
+    if st.session_state.clues[index] is None:
+        st.session_state.clues[index] = st.session_state.game.get_clue(index)
 
-    if outcome == "Too High":
-        return current_score - 5
 
-    if outcome == "Too Low":
-        return current_score - 5
+def get_game() -> Game:
+    if "game" not in st.session_state:
+        new_game()
+    return st.session_state.game
 
-    return current_score
 
-st.set_page_config(page_title="Glitchy Guesser", page_icon="🎮")
+# ---------------------------------------------------------------------------
+# Page
+# ---------------------------------------------------------------------------
 
-st.title("🎮 Game Glitch Investigator")
-st.caption("An AI-generated guessing game. Something is off.")
+st.set_page_config(page_title="MLB Player Guesser", page_icon="⚾")
 
-st.sidebar.header("Settings")
+st.title("⚾ MLB Player Guessing Game")
+st.caption("Guess the mystery 2025 MLB player from AI-generated clues.")
 
-difficulty = st.sidebar.selectbox(
-    "Difficulty",
-    ["Easy", "Normal", "Hard"],
-    index=1,
+game = get_game()
+
+st.sidebar.header("New Round Filters")
+# Autocomplete over the actual team codes in the data. "" = any team.
+filter_team = st.sidebar.selectbox(
+    "Team (optional)",
+    options=["", *game.all_teams()],
+    index=0,
+    help="Pick a team to restrict the mystery player, or leave as Any.",
+    placeholder="Any team",
 )
+filter_awards = st.sidebar.checkbox("All-Stars only", value=False)
 
-attempt_limit_map = {
-    "Easy": 6,
-    "Normal": 8,
-    "Hard": 5,
-}
-attempt_limit = attempt_limit_map[difficulty]
-
-low, high = get_range_for_difficulty(difficulty)
-
-st.sidebar.caption(f"Range: {low} to {high} ")
-st.sidebar.caption(f"Attempts allowed: {attempt_limit}")
-
-if "secret" not in st.session_state:
-    st.session_state.secret = random.randint(low, high)
-
-if "attempts" not in st.session_state:
-    st.session_state.attempts = 1
-
-if "score" not in st.session_state:
-    st.session_state.score = 0
-
-if "status" not in st.session_state:
-    st.session_state.status = "playing"
-
-if "history" not in st.session_state:
-    st.session_state.history = []
-
-st.subheader("Make a guess")
-
-st.info(
-    f"Guess a number between {low} and {high} "
-    f"Attempts left: {attempt_limit - st.session_state.attempts}"
-)
-
-with st.expander("Developer Debug Info"):
-    st.write("Secret:", st.session_state.secret)
-    st.write("Attempts:", st.session_state.attempts)
-    st.write("Score:", st.session_state.score)
-    st.write("Difficulty:", difficulty)
-    st.write("History:", st.session_state.history)
-
-raw_guess = st.text_input(
-    "Enter your guess:",
-    key=f"guess_input_{difficulty}"
-)
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    submit = st.button("Submit Guess 🚀")
-with col2:
-    new_game = st.button("New Game 🔁")
-with col3:
-    show_hint = st.checkbox("Show hint", value=True)
-
-if new_game:
-    st.session_state.attempts = 0
-    st.session_state.secret = random.randint(low, high)
-    st.success("New game started.")
+if st.sidebar.button("Start New Round 🔁"):
+    new_game(team=filter_team or None, awards=filter_awards)
     st.rerun()
 
-if st.session_state.status != "playing":
-    if st.session_state.status == "won":
-        st.success("You already won. Start a new game to play again.")
+# ---------------------------------------------------------------------------
+# Player stat card — everything about the secret player EXCEPT name and team.
+# These are the reasoning aids; name/team stay hidden (team is a "New Round"
+# filter, revealing it would defeat the guess).
+# ---------------------------------------------------------------------------
+
+
+def render_stat_card(player) -> None:
+    """Show the secret player's stats, including team, omitting only the name."""
+    st.subheader("Mystery Player Stats")
+
+    def fmt(value, decimals=None):
+        if value is None:
+            return "—"
+        if decimals is not None:
+            return f"{value:.{decimals}f}"
+        return str(value)
+
+    top = st.columns(4)
+    top[0].metric("Position", fmt(player.position) or "—")
+    top[1].metric("Age", fmt(player.age))
+    top[2].metric("WAR", fmt(player.war, 1))
+    top[3].metric("Games", fmt(player.games))
+
+    bottom = st.columns(4)
+    bottom[0].metric("HR", fmt(player.home_runs))
+    bottom[1].metric("AVG", fmt(player.batting_avg, 3))
+    bottom[2].metric("OBP", fmt(player.on_base_pct, 3))
+    bottom[3].metric("SLG", fmt(player.slugging, 3))
+
+    stat = st.columns(3)
+    stat[0].metric("OPS", fmt(player.ops, 3))
+    stat[1].metric("Team", fmt(player.team) or "—")
+
+    stat = st.columns(1)
+    awards = player.awards if player.awards and player.awards != "None" else "—"
+    stat[0].metric("Awards", awards)
+    
+
+
+render_stat_card(game.secret_player)
+st.divider()
+
+st.subheader("Clues")
+for i, clue_text in enumerate(st.session_state.clues):
+    label = Clue.CLUE_LABELS[i]
+    if clue_text is not None:
+        st.info(f"**{label}:** {clue_text}")
     else:
-        st.error("Game over. Start a new game to try again.")
+        if st.button(f"Reveal: {label} 🔍", key=f"reveal_{i}"):
+            with st.spinner("Generating clue…"):
+                reveal_clue(i)
+            st.rerun()
+
+revealed = sum(1 for c in st.session_state.clues if c is not None)
+st.caption(f"Clues revealed: {revealed} / {game.MAX_CLUES}")
+
+with st.expander("Developer Debug Info"):
+    st.write("Secret player:", game.secret_player.name if game.secret_player else None)
+    st.write("Clue index:", game.clue_index)
+    st.write("Attempts:", game.attempts)
+    st.write("Score:", game.score)
+    st.write("Status:", game.status)
+
+# ---------------------------------------------------------------------------
+# Round already over
+# ---------------------------------------------------------------------------
+
+if game.status != "playing":
+    if game.status == "won":
+        st.success(
+            f"🎉 You won! It was **{game.secret_player.name}**. "
+            f"Final score: {game.score}"
+        )
+    else:
+        st.error(
+            f"Out of guesses! It was **{game.secret_player.name}**. "
+            f"Score: {game.score}"
+        )
     st.stop()
 
+# ---------------------------------------------------------------------------
+# Guess input
+# ---------------------------------------------------------------------------
+
+st.subheader("Make a guess")
+st.caption(f"Guesses remaining: {game.MAX_CLUES - game.attempts}")
+# Autocomplete: type to filter the fixed list of 2025 player names. A blank
+# leading option keeps the box empty until the user picks, so no accidental
+# submit of a pre-filled name.
+guess = st.selectbox(
+    "Player name:",
+    options=["", *game.all_names],
+    index=0,
+    key=f"guess_{game.attempts}",
+    placeholder="Start typing a player's name…",
+)
+submit = st.button("Submit Guess 🚀")
+
 if submit:
-    st.session_state.attempts += 1
-
-    ok, guess_int, err = parse_guess(raw_guess)
-
-    if not ok:
-        st.session_state.history.append(raw_guess)
-        st.error(err)
+    if not guess:
+        st.warning("Pick a player from the list.")
     else:
-        st.session_state.history.append(guess_int)
-
-        secret = st.session_state.secret
-            
-
-        outcome, message = check_guess(guess_int, secret)
-
-        if show_hint:
-            st.warning(message)
-
-        st.session_state.score = update_score(
-            current_score=st.session_state.score,
-            outcome=outcome,
-            attempt_number=st.session_state.attempts,
-        )
-
-        if outcome == "Win":
+        correct = game.check_guess(guess)
+        if correct:
             st.balloons()
-            st.session_state.status = "won"
-            st.success(
-                f"You won! The secret was {st.session_state.secret}. "
-                f"Final score: {st.session_state.score}"
-            )
         else:
-            if st.session_state.attempts >= attempt_limit:
-                st.session_state.status = "lost"
-                st.error(
-                    f"Out of attempts! "
-                    f"The secret was {st.session_state.secret}. "
-                    f"Score: {st.session_state.score}"
-                )
+            remaining = game.MAX_CLUES - game.attempts
+            if remaining > 0:
+                st.warning(f"Wrong guess. {remaining} guess(es) left.")
+        st.rerun()
 
 st.divider()
-st.caption("Built by an AI that claims this code is production-ready.")
+st.caption("Clues generated by Gemini and screened so they never leak the name.")
