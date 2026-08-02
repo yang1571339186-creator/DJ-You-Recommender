@@ -100,7 +100,7 @@ This project taught that AI works best in a well-defined environement and when i
 2026-08-02 12:26:00,829 [INFO] game_models: Clue 1 ready (0 retries)
 ```
 #### Validator Finding bad nickname
-
+```
 2026-08-02 12:26:39,328 [INFO] game_models: Secret player chosen from 45 candidates (team=any, awards=True)
 2026-08-02 12:26:42,310 [INFO] game_models: Generating clue 0 for James Wood
 2026-08-02 12:26:42,588 [INFO] game_models: Gemini request (model=gemini-3.6-flash, 212 chars)
@@ -113,4 +113,4 @@ This project taught that AI works best in a well-defined environement and when i
 2026-08-02 12:27:05,534 [INFO] game_models: Validator: clue is clean
 2026-08-02 12:27:05,534 [INFO] game_models: Validator: clue is clean
 2026-08-02 12:27:05,534 [INFO] game_models: Clue 0 ready (1 retries)
-
+```
