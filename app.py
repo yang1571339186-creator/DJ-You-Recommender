@@ -117,9 +117,15 @@ for i, clue_text in enumerate(st.session_state.clues):
         st.info(f"**{label}:** {clue_text}")
     else:
         if st.button(f"Reveal: {label} 🔍", key=f"reveal_{i}"):
-            with st.spinner("Generating clue…"):
-                reveal_clue(i)
-            st.rerun()
+            try:
+                with st.spinner("Generating clue…"):
+                    reveal_clue(i)
+            except Exception:
+                # Gemini call failed (network, API key, rate limit, etc.).
+                # Leave the clue unrevealed so the button can be tried again.
+                st.error("Couldn't generate that clue. Please try again.")
+            else:
+                st.rerun()
 
 revealed = sum(1 for c in st.session_state.clues if c is not None)
 st.caption(f"Clues revealed: {revealed} / {game.MAX_CLUES}")

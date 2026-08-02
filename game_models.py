@@ -15,6 +15,7 @@ Classes:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
 from dataclasses import dataclass, field
@@ -25,6 +26,18 @@ from dataclasses import dataclass, field
 # ---------------------------------------------------------------------------
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "Data", "MLB_2025")
+
+# Module logger. Prints to the console at INFO level; the app/tests can raise
+# the level or attach their own handlers. A basic StreamHandler is configured
+# here so logs show up even when nothing else sets up logging.
+logger = logging.getLogger("game_models")
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    )
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
 
 
 def _load_env(path: str = ".env") -> dict:
@@ -138,10 +151,17 @@ class GeminiModel:
     def ask(self, prompt: str) -> str:
         """Send a prompt to Gemini and return the text response."""
         client = self._get_client()
-        resp = client.models.generate_content(
-            model=self.model_name, contents=prompt
-        )
-        return (resp.text or "").strip()
+        logger.info("Gemini request (model=%s, %d chars)", self.model_name, len(prompt))
+        try:
+            resp = client.models.generate_content(
+                model=self.model_name, contents=prompt
+            )
+        except Exception:
+            logger.exception("Gemini request failed")
+            raise
+        text = (resp.text or "").strip()
+        logger.info("Gemini response (%d chars)", len(text))
+        return text
 
 
 # ---------------------------------------------------------------------------
@@ -166,19 +186,24 @@ class ValidatorModel:
         substring match on the full name and each name token.
         """
         if not clue_text or not player_name:
+            logger.debug("Validator: empty clue or name; treating as clean")
             return False
         text = clue_text.lower()
         if player_name.lower() in text:
+            logger.info("Validator: leak detected (full name present)")
             return True
         for token in player_name.lower().split():
             if len(token) > 2 and token in text:
+                logger.info("Validator: leak detected (name token '%s' present)", token)
                 return True
+        logger.info("Validator: clue is clean")
         return False
 
     def build_correction_prompt(
         self, question: str, player_name: str, bad_answer: str
     ) -> str:
         """Build an explicit re-prompt telling Gemini not to mention the name."""
+        logger.info("Validator: building corrective re-prompt")
         return (
             "Your previous answer mentioned the player's name, which is not "
             f"allowed. Do NOT include '{player_name}' or any part of it.\n"
@@ -189,6 +214,7 @@ class ValidatorModel:
     @staticmethod
     def redact_name(clue_text: str, player_name: str) -> str:
         """Last-resort fallback: blank out the name if retries are exhausted."""
+        logger.warning("Validator: redacting name as last-resort fallback")
         result = clue_text
         for token in [player_name, *player_name.split()]:
             if len(token) > 2:
@@ -242,6 +268,7 @@ class Clue:
         """
         question = self.CLUE_QUESTIONS[index]
         prompt = self._build_prompt(question)
+        logger.info("Generating clue %d for %s", index, self.player.name)
 
         answer = self.gemini.ask(prompt)
         retries = 0
@@ -249,6 +276,12 @@ class Clue:
             self.validator.contains_name(answer, self.player.name)
             and retries < self.validator.max_retries
         ):
+            logger.warning(
+                "Clue %d leaked the name; re-prompting (retry %d/%d)",
+                index,
+                retries + 1,
+                self.validator.max_retries,
+            )
             correction = self.validator.build_correction_prompt(
                 question, self.player.name, answer
             )
@@ -256,7 +289,11 @@ class Clue:
             retries += 1
 
         if self.validator.contains_name(answer, self.player.name):
+            logger.warning(
+                "Clue %d still leaked after %d retries; redacting name", index, retries
+            )
             answer = self.validator.redact_name(answer, self.player.name)
+        logger.info("Clue %d ready (%d retries)", index, retries)
         return answer
 
 
@@ -291,6 +328,7 @@ class Game:
             raw = json.load(f)
         self.player_data = list(raw.values())
         self.all_names = sorted(r.get("Player", "") for r in self.player_data)
+        logger.info("Loaded %d players from %s", len(self.player_data), self.data_path)
 
     def all_teams(self) -> list:
         """Return the sorted unique team codes present in the data.
@@ -324,6 +362,12 @@ class Game:
 
         record = random.choice(candidates)
         self.secret_player = Player.from_record(record)
+        logger.info(
+            "Secret player chosen from %d candidates (team=%s, awards=%s)",
+            len(candidates),
+            team or "any",
+            awards,
+        )
         return self.secret_player
 
     def retrieve_guess(self, name: str) -> Player | None:
@@ -345,6 +389,7 @@ class Game:
         Filters (team, awards) are forwarded to retrieve_player to constrain
         which players can be chosen as the secret.
         """
+        logger.info("Starting new round (team=%s, awards=%s)", team or "any", awards)
         self.retrieve_player(team=team, awards=awards)
         self.clue = Clue(self.secret_player)
         self.clue_index = 0
@@ -380,8 +425,20 @@ class Game:
         if correct:
             self.status = "won"
             self.score += self._score_for_clues_used()
+            logger.info(
+                "Correct guess on attempt %d; round won (score=%d)",
+                self.attempts,
+                self.score,
+            )
         elif self.attempts >= self.MAX_CLUES:
             self.status = "lost"
+            logger.info("Wrong guess on attempt %d; round lost", self.attempts)
+        else:
+            logger.info(
+                "Wrong guess on attempt %d; %d left",
+                self.attempts,
+                self.MAX_CLUES - self.attempts,
+            )
         return correct
 
     def _score_for_clues_used(self) -> int:
