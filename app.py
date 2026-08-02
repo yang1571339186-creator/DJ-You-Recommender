@@ -25,6 +25,7 @@ def new_game(team: str | None = None, awards: bool = False) -> None:
     game.start_new_round(team=team, awards=awards)
     st.session_state.game = game
     st.session_state.clues = [None] * game.MAX_CLUES
+    st.session_state.guesses = []  # list of guessed Player objects
     st.session_state.messages = []
 
 
@@ -153,6 +154,21 @@ if game.status != "playing":
 
 st.subheader("Make a guess")
 st.caption(f"Guesses remaining: {game.MAX_CLUES - game.attempts}")
+
+# Previous guesses — name, team, position of each player already guessed.
+if st.session_state.guesses:
+    st.markdown("**Previous guesses**")
+    st.table(
+        [
+            {
+                "Name": p.name,
+                "Team": p.team,
+                "Position": p.position,
+            }
+            for p in st.session_state.guesses
+        ]
+    )
+
 # Autocomplete: type to filter the fixed list of 2025 player names. A blank
 # leading option keeps the box empty until the user picks, so no accidental
 # submit of a pre-filled name.
@@ -169,6 +185,10 @@ if submit:
     if not guess:
         st.warning("Pick a player from the list.")
     else:
+        # Record the guessed player's details (does not touch secret_player).
+        guessed_player = game.retrieve_guess(guess)
+        if guessed_player is not None:
+            st.session_state.guesses.append(guessed_player)
         correct = game.check_guess(guess)
         if correct:
             st.balloons()
